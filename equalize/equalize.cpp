@@ -4,26 +4,18 @@
 using namespace cv;
 using namespace std;
 
-Mat histograma_acumulado(Mat hist){
-  for(int i=1; i<hist.rows; i++){
-    hist.at<float>(i) += hist.at<float>(i - 1);
-  }
-  return hist;
-}
-
 int main(int argc, char** argv){
-  Mat image, cp;
-  int width, height;
-  VideoCapture cap;
-  vector<Mat> planes;
-  Mat histR, histG, histB;
-  int nbins = 256;
-  float range[] = {0, 256};
-  const float *histrange = {range};
-  bool uniform = true;
-  bool acummulate = false;
-  CvPoint p;
 
+  VideoCapture cap;
+  int height, width;
+  int histSize = 256;
+  float range[] = {0, histSize};
+  const float* histRange = {range};
+  Mat image, copy;
+  Mat histogram, histogram_copy;
+  bool uniform = true, accumulate = false;
+  int histdisplay_width = 128, histdisplay_height = 68;
+  
   cap.open(0);
 
   if(!cap.isOpened()){
@@ -37,70 +29,46 @@ int main(int argc, char** argv){
   cout << "largura = " << width << endl;
   cout << "altura  = " << height << endl;
 
-  int histw = nbins, histh = nbins/2;
-  Mat histImgR(histh, histw, CV_8UC3, Scalar(0,0,0));
-  Mat histImgG(histh, histw, CV_8UC3, Scalar(0,0,0));
-  Mat histImgB(histh, histw, CV_8UC3, Scalar(0,0,0));
-
   while(1){
     cap >> image;
-    cap >> cp;
-    split (image, planes);
-    calcHist(&planes[0], 1, 0, Mat(), histR, 1,
-             &nbins, &histrange,
-             uniform, acummulate);
-    calcHist(&planes[1], 1, 0, Mat(), histG, 1,
-             &nbins, &histrange,
-             uniform, acummulate);
-    calcHist(&planes[2], 1, 0, Mat(), histB, 1,
-             &nbins, &histrange,
-             uniform, acummulate);
-
-    histR = histograma_acumulado(histR);
-    histG = histograma_acumulado(histG);
-    histB = histograma_acumulado(histB);
+    cvtColor(image, image, CV_BGR2GRAY);
     
-    normalize(histR, histR, 0, histImgR.rows, NORM_MINMAX, -1, Mat());
-    normalize(histG, histG, 0, histImgG.rows, NORM_MINMAX, -1, Mat());
-    normalize(histB, histB, 0, histImgB.rows, NORM_MINMAX, -1, Mat());
+    copy = image.clone();
+    
+    Mat histImage(histdisplay_height, histdisplay_width, CV_8U, Scalar(0, 0, 0));
+    Mat histImageCopy(histdisplay_height, histdisplay_width, CV_8U, Scalar(0, 0, 0));
 
-    for(int i=0; i<image.rows; i++){
-      for(int j=0; j<image.cols; j++){
-        Vec3b color = image.at<Vec3b>(Point(j, i));
-        color[0] = histR.at<float>(color[0]);
-        color[1] = histG.at<float>(color[1]);
-        color[2] = histB.at<float>(color[2]);
-        image.at<Vec3b>(Point(j, i)) = color;
-      }  
-    }
+    calcHist(&image, 1, 0, Mat(), histogram, 1, &histSize, &histRange, uniform, accumulate);
+    histogram_copy = histogram.clone(); 
+    normalize(histogram_copy, histogram_copy, 0, histImage.rows, NORM_MINMAX, -1, Mat());
 
-    histImgR.setTo(Scalar(0));
-    histImgG.setTo(Scalar(0));
-    histImgB.setTo(Scalar(0));
-
-    for(int i=0; i<nbins; i++){
-      line(histImgR,
-           Point(i, histh),
-           Point(i, histh-cvRound(histR.at<float>(i))),
-           Scalar(0, 0, 255), 1, 4, 0);
-      line(histImgG,
-           Point(i, histh),
-           Point(i, histh-cvRound(histG.at<float>(i))),
-           Scalar(0, 255, 0), 1, 4, 0);
-      line(histImgB,
-           Point(i, histh),
-           Point(i, histh-cvRound(histB.at<float>(i))),
-           Scalar(255, 0, 0), 1, 4, 0);
-    }
-
-    histImgR.copyTo(image(Rect(0, 0       ,nbins, histh)));
-    histImgG.copyTo(image(Rect(0, histh   ,nbins, histh)));
-    histImgB.copyTo(image(Rect(0, 2*histh ,nbins, histh)));
+    equalizeHist(image, image); 
   
+    calcHist(&image, 1, 0, Mat(), histogram, 1, &histSize, &histRange, uniform, accumulate);
+    normalize(histogram, histogram, 0, histImage.rows, NORM_MINMAX, -1, Mat());
+
+    for(int i=0; i<histSize; i++){
+      line(
+        histImage, 
+        Point(i, histdisplay_height),
+        Point(i, histdisplay_height - cvRound(histogram.at<float>(i))),
+        Scalar(255, 255, 255), 1, 8, 0
+      );
+      line(
+        histImageCopy,
+        Point(i, histdisplay_height),
+        Point(i, histdisplay_height - cvRound(histogram_copy.at<float>(i))),
+        Scalar(255, 255, 255), 1, 8, 0  
+      );
+    }
+
+    histImage.copyTo(image(Rect(0, 0, histImage.cols, histImage.rows)));
+    histImageCopy.copyTo(copy(Rect(0, 0, histImage.cols, histImage.rows)));
+
     imshow("equalizada", image);
-    imshow("nao-equalizada", cp);
+    imshow("nao-equalizada", copy);
+
     if(waitKey(1) == 27) break;
   }
   return 0;
 }
-
