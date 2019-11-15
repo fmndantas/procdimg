@@ -18,13 +18,13 @@ float mascara[] = {  // kernel para filtragem
 Mat original = imread("image.jpg");
 
 int decay_slider = 0, decay_slider_max = 100;
-int offset_slider = 0, offset_slider_max = original.rows/2;
-int alpha_slider = 0, alpha_slider_max = 100;
-int average_slider = 0, average_slider_max = 300;
+int offset_slider = 100, offset_slider_max = original.rows/2;
+int average_slider = 180, average_slider_max = 300;
+int height_slider = 0, height_slider_max = offset_slider;
 
-double alpha;
 double dcy; 
 double avg; 
+double height;
 int offset;
 
 char trackbar_name[50];
@@ -34,18 +34,18 @@ char key;
 Mat alpha_mask = Mat::zeros(Size(original.rows, original.cols), CV_8U);
 Mat c_alpha_mask = Mat::zeros(Size(original.rows, original.cols), CV_8U);			
 
-double alphafunc(double d, int offset, int x, int rows){
-	double ptop = offset;
-	double pbottom = rows - offset;
-	return 0.5 * (tanh((x - ptop)/d) - tanh((x - pbottom)/d));
+double alphafunc(double d, int offset, int i, int rows, double height){
+	double ptop = height * (rows - offset);
+	double pbottom = ptop + offset;
+	return 0.5 * (tanh((i - ptop)/d) - tanh((i - pbottom)/d));
 }
 
-void make_mask(Mat* mask, double d, int offset){
+void make_mask(Mat* mask, double d, int offset, double height){
 	int rows = mask->rows;
 	int cols = mask->cols;
 	for(int i = 0; i < rows; i++){
 		for(int j = 0; j < cols; j++){
-			mask->at<uchar>(i, j) = int(255 * alphafunc(d, offset, i, rows));
+			mask->at<uchar>(i, j) = int(255 * alphafunc(d, offset, i, rows, height));
 		}
 	}
 }
@@ -69,12 +69,12 @@ Mat make_kernel(float vec[], int size, bool mascara=false, float factor=1.0){
 }
 
 void on_trackbar_change(int, void*){
-	alpha = (double) alpha_slider/alpha_slider_max;
 	dcy = (double) decay_slider;
-	offset = (double) offset_slider;
-	avg = (double) average_slider/100; 
+	offset = (int) offset_slider;
+	avg = (double) average_slider/100;
+	height = (double) height_slider/100;
 	
-	make_mask(&alpha_mask, dcy, offset);
+	make_mask(&alpha_mask, dcy, offset, height);
 	make_negative(&c_alpha_mask, alpha_mask);
 	split(original, channels);
 	multiply(alpha_mask, channels[0], aux_channels[0], 1/255.0);	
@@ -96,8 +96,7 @@ void on_trackbar_change(int, void*){
 	multiply(c_alpha_mask, channels[2], aux_channels[2], 1/255.0);
 	merge(aux_channels, 3, out2);
 
-	addWeighted(out1, alpha, out2, 1 - alpha, 0.0, tiltshifted);
-
+	addWeighted(out1, 0.5, out2, 0.5, 0.0, tiltshifted);
 	addWeighted(tiltshifted, avg, tiltshifted, 0.0, 0.0, tiltshifted);
 
 	imshow("tiltshift", tiltshifted);
@@ -107,19 +106,19 @@ int main(int argvc, char** argv){
 	
 	namedWindow("tiltshift", WINDOW_AUTOSIZE);
 
-	sprintf(trackbar_name, "Alpha %d", alpha_slider_max);
-	createTrackbar(trackbar_name, "tiltshift", &alpha_slider, alpha_slider_max, on_trackbar_change);
-
 	sprintf(trackbar_name, "Decay %d", decay_slider_max);
 	createTrackbar(trackbar_name, "tiltshift", &decay_slider, decay_slider_max, on_trackbar_change);
 
 	sprintf(trackbar_name, "Offset %d", offset_slider_max);
 	createTrackbar(trackbar_name, "tiltshift", &offset_slider, offset_slider_max, on_trackbar_change);
 
+	sprintf(trackbar_name, "Height %d", height_slider_max);
+	createTrackbar(trackbar_name, "tiltshift", &height_slider, height_slider_max, on_trackbar_change);
+
 	sprintf(trackbar_name, "Average %d", average_slider_max);
 	createTrackbar(trackbar_name, "tiltshift", &average_slider, average_slider_max, on_trackbar_change);
 
-	on_trackbar_change(alpha_slider, 0);
+	on_trackbar_change(decay_slider, 0);	
 
 	key = waitKey(0);
 	if(key == 's'){
